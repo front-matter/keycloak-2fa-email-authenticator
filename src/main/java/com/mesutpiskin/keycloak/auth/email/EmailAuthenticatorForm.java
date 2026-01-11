@@ -510,8 +510,15 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
     }
 
     private String buildMagicLink(AuthenticationFlowContext context, String code) {
-        // Use form action URL which has correct parameters
-        UriBuilder builder = UriBuilder.fromUri(context.getActionUrl(context.getExecution().getId()));
+        UriBuilder builder = UriBuilder.fromUri(context.getUriInfo().getRequestUri());
+        // NOTE: This link is only valid while the current Keycloak authentication
+        // session is alive.
+        // Keycloak requires the current flow parameters (like
+        // session_code/execution/tab_id/client_data)
+        // to resume the in-flight authentication. Removing them will typically result
+        // in "Page has expired".
+        builder.replaceQueryParam(EmailConstants.MAGIC_LINK_MARKER_PARAM);
+        builder.replaceQueryParam(EmailConstants.CODE);
         builder.queryParam(EmailConstants.MAGIC_LINK_MARKER_PARAM, "1");
         builder.queryParam(EmailConstants.CODE, code);
         return builder.build().toString();
