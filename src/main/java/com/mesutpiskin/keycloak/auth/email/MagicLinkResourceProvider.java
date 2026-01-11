@@ -141,8 +141,8 @@ public class MagicLinkResourceProvider implements RealmResourceProvider {
   /**
    * Builds a redirect URL back to the authentication endpoint.
    * The authenticator will detect the magic link token and auto-authenticate.
-   * Uses stored redirect_uri from user attributes to preserve original auth
-   * context.
+   * Uses stored redirect_uri and OAuth2/OIDC parameters from user attributes
+   * to preserve original auth context, including PKCE parameters.
    */
   private URI buildAuthRedirect(RealmModel realm, UserModel user, String magicToken) {
     // Retrieve stored auth context
@@ -165,6 +165,30 @@ public class MagicLinkResourceProvider implements RealmResourceProvider {
     // Add redirect_uri if available (required by OIDC)
     if (redirectUri != null && !redirectUri.isBlank()) {
       builder.queryParam("redirect_uri", redirectUri);
+    }
+
+    // Add PKCE parameters if available (required for modern OAuth2 flows)
+    String codeChallenge = user.getFirstAttribute("magicLinkCodeChallenge");
+    String codeChallengeMethod = user.getFirstAttribute("magicLinkCodeChallengeMethod");
+    if (codeChallenge != null && !codeChallenge.isBlank()) {
+      builder.queryParam("code_challenge", codeChallenge);
+    }
+    if (codeChallengeMethod != null && !codeChallengeMethod.isBlank()) {
+      builder.queryParam("code_challenge_method", codeChallengeMethod);
+    }
+
+    // Add other OAuth2/OIDC parameters
+    String state = user.getFirstAttribute("magicLinkState");
+    String nonce = user.getFirstAttribute("magicLinkNonce");
+    String responseMode = user.getFirstAttribute("magicLinkResponseMode");
+    if (state != null && !state.isBlank()) {
+      builder.queryParam("state", state);
+    }
+    if (nonce != null && !nonce.isBlank()) {
+      builder.queryParam("nonce", nonce);
+    }
+    if (responseMode != null && !responseMode.isBlank()) {
+      builder.queryParam("response_mode", responseMode);
     }
 
     return builder.build(realm.getName());

@@ -18,6 +18,13 @@ This implementation provides a **solid, production-ready magic link solution** t
 - Attributes:
   - `emailCode`: The verification code
   - `emailCodeExpiresAt`: Timestamp when the code expires
+  - `magicLinkRedirectUri`: Original redirect URI for OAuth2 flow
+  - `magicLinkClientId`: Client ID from the authentication request
+  - `magicLinkCodeChallenge`: PKCE code challenge (required for PKCE flows)
+  - `magicLinkCodeChallengeMethod`: PKCE method (S256 or plain)
+  - `magicLinkState`: OAuth2 state parameter
+  - `magicLinkNonce`: OpenID Connect nonce parameter
+  - `magicLinkResponseMode`: OAuth2 response mode
 - Storage is persistent across sessions
 
 ### 3. **Session-Independent URLs**
@@ -45,6 +52,13 @@ long expiresAt = now + (ttl * 1000L);
 // Store in user attributes (persistent)
 user.setSingleAttribute(EmailConstants.CODE, code);
 user.setSingleAttribute("emailCodeExpiresAt", String.valueOf(expiresAt));
+
+// Store OAuth2/OIDC parameters including PKCE for magic link
+user.setSingleAttribute("magicLinkRedirectUri", redirectUri);
+user.setSingleAttribute("magicLinkClientId", clientId);
+user.setSingleAttribute("magicLinkCodeChallenge", codeChallenge);
+user.setSingleAttribute("magicLinkCodeChallengeMethod", codeChallengeMethod);
+// ... additional OAuth2 parameters (state, nonce, response_mode)
 
 // Store in session notes (for manual entry)
 session.setAuthNote(EmailConstants.CODE, code);
@@ -77,8 +91,14 @@ UriBuilder builder = UriBuilder.fromUri(baseUri)
 ```
 /realms/{realm}/protocol/openid-connect/auth?
   client_id={clientId}&
+  redirect_uri={redirectUri}&
   response_type=code&
   scope=openid&
+  state={state}&
+  nonce={nonce}&
+  code_challenge={codeChallenge}&
+  code_challenge_method={codeChallengeMethod}&
+  response_mode={responseMode}&
   kc_email_magic=1&
   magic_token={uuid}&
   login_hint={userId}

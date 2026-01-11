@@ -167,6 +167,11 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
         user.removeAttribute("magicLinkTokenExpiry");
         user.removeAttribute("magicLinkRedirectUri");
         user.removeAttribute("magicLinkClientId");
+        user.removeAttribute("magicLinkCodeChallenge");
+        user.removeAttribute("magicLinkCodeChallengeMethod");
+        user.removeAttribute("magicLinkState");
+        user.removeAttribute("magicLinkNonce");
+        user.removeAttribute("magicLinkResponseMode");
         resetEmailCode(context);
 
         logger.infof("Magic link token validated successfully for user %s", user.getId());
@@ -583,16 +588,42 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
         // Build session-independent magic link using custom resource provider
         UserModel user = context.getUser();
         RealmModel realm = context.getRealm();
+        AuthenticationSessionModel authSession = context.getAuthenticationSession();
 
         // Store auth context information for later redirect
-        String clientId = context.getAuthenticationSession().getClient().getClientId();
-        String redirectUri = context.getAuthenticationSession().getRedirectUri();
+        String clientId = authSession.getClient().getClientId();
+        String redirectUri = authSession.getRedirectUri();
 
-        // Store redirect URI in user attributes so the resource provider can use it
+        // Store all necessary OAuth2/OIDC parameters in user attributes
+        // so the resource provider can reconstruct the auth redirect
         if (redirectUri != null && !redirectUri.isBlank()) {
             user.setSingleAttribute("magicLinkRedirectUri", redirectUri);
         }
         user.setSingleAttribute("magicLinkClientId", clientId);
+
+        // Store PKCE parameters (required for modern OAuth2 flows)
+        String codeChallenge = authSession.getClientNote("code_challenge");
+        String codeChallengeMethod = authSession.getClientNote("code_challenge_method");
+        if (codeChallenge != null && !codeChallenge.isBlank()) {
+            user.setSingleAttribute("magicLinkCodeChallenge", codeChallenge);
+        }
+        if (codeChallengeMethod != null && !codeChallengeMethod.isBlank()) {
+            user.setSingleAttribute("magicLinkCodeChallengeMethod", codeChallengeMethod);
+        }
+
+        // Store other OAuth2/OIDC parameters
+        String state = authSession.getClientNote("state");
+        String nonce = authSession.getClientNote("nonce");
+        String responseMode = authSession.getClientNote("response_mode");
+        if (state != null && !state.isBlank()) {
+            user.setSingleAttribute("magicLinkState", state);
+        }
+        if (nonce != null && !nonce.isBlank()) {
+            user.setSingleAttribute("magicLinkNonce", nonce);
+        }
+        if (responseMode != null && !responseMode.isBlank()) {
+            user.setSingleAttribute("magicLinkResponseMode", responseMode);
+        }
 
         UriBuilder builder = UriBuilder.fromUri(context.getSession().getContext().getUri().getBaseUri())
                 .path("realms/{realm}/email-magic-link/verify")
