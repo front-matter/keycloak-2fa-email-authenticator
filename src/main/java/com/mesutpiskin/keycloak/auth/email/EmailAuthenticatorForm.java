@@ -98,6 +98,18 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
     }
 
     private boolean tryMagicLink(AuthenticationFlowContext context, UserModel user) {
+        MultivaluedMap<String, String> queryParams = context.getHttpRequest().getUri().getQueryParameters();
+        String marker = queryParams.getFirst(EmailConstants.MAGIC_LINK_MARKER_PARAM);
+
+        // Check for new token-based magic link (from resource provider)
+        // Always process magic_token if present, regardless of magicEnabled config
+        // because the token was already validated by MagicLinkResourceProvider
+        String magicToken = queryParams.getFirst("magic_token");
+        if ("1".equals(marker) && magicToken != null && !magicToken.isBlank()) {
+            return validateMagicToken(context, user, magicToken);
+        }
+
+        // For legacy magic links, check if magic links are enabled in config
         AuthenticatorConfigModel config = context.getAuthenticatorConfig();
         Map<String, String> configValues = config != null && config.getConfig() != null
                 ? config.getConfig()
@@ -108,15 +120,6 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
                         String.valueOf(EmailConstants.DEFAULT_MAGIC_LINK_ENABLED)));
         if (!magicEnabled) {
             return false;
-        }
-
-        MultivaluedMap<String, String> queryParams = context.getHttpRequest().getUri().getQueryParameters();
-        String marker = queryParams.getFirst(EmailConstants.MAGIC_LINK_MARKER_PARAM);
-
-        // Check for new token-based magic link (from resource provider)
-        String magicToken = queryParams.getFirst("magic_token");
-        if ("1".equals(marker) && magicToken != null && !magicToken.isBlank()) {
-            return validateMagicToken(context, user, magicToken);
         }
 
         // Legacy: Check for old code-based magic link (deprecated, kept for backwards
