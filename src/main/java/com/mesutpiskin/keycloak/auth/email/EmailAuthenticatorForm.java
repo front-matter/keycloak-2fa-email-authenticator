@@ -179,20 +179,27 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
                         String.valueOf(EmailConstants.DEFAULT_MAGIC_LINK_ENABLED)));
 
         String code = SecretGenerator.getInstance().randomString(length, SecretGenerator.DIGITS);
+        long now = System.currentTimeMillis();
+        long expiresAt = now + (ttl * 1000L);
+
+        // Store code in user attributes for session-independent magic links
+        UserModel user = context.getUser();
+        user.setSingleAttribute(EmailConstants.CODE, code);
+        user.setSingleAttribute("emailCodeExpiresAt", String.valueOf(expiresAt));
+
         String magicLink = magicEnabled ? buildMagicLink(context, code) : null;
         if (config != null && Boolean.parseBoolean(config.getConfig().get(EmailConstants.SIMULATION_MODE))) {
             logger.infof("***** SIMULATION MODE ***** Email code send to %s for user %s is: %s",
-                    context.getUser().getEmail(), context.getUser().getUsername(), code);
+                    user.getEmail(), user.getUsername(), code);
             if (magicLink != null) {
                 logger.infof("***** SIMULATION MODE ***** Magic link for user %s: %s",
-                        context.getUser().getUsername(), magicLink);
+                        user.getUsername(), magicLink);
             }
         } else {
             sendEmailWithCode(context, code, ttl, magicLink);
         }
         session.setAuthNote(EmailConstants.CODE, code);
-        long now = System.currentTimeMillis();
-        session.setAuthNote(EmailConstants.CODE_TTL, Long.toString(now + (ttl * 1000L)));
+        session.setAuthNote(EmailConstants.CODE_TTL, Long.toString(expiresAt));
         session.setAuthNote(EmailConstants.CODE_RESEND_AVAILABLE_AFTER, Long.toString(now + (resendCooldown * 1000L)));
     }
 
@@ -393,6 +400,13 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
         session.removeAuthNote(EmailConstants.CODE);
         session.removeAuthNote(EmailConstants.CODE_TTL);
         session.removeAuthNote(EmailConstants.CODE_RESEND_AVAILABLE_AFTER);
+
+        // Also clear code from user attributes
+        UserModel user = context.getUser();
+        if (user != null) {
+            user.removeAttribute(EmailConstants.CODE);
+            user.removeAttribute("emailCodeExpiresAt");
+        }
     }
 
     @Override
@@ -510,17 +524,17 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
     }
 
     private String buildMagicLink(AuthenticationFlowContext context, String code) {
-        UriBuilder builder = UriBuilder.fromUri(context.getUriInfo().getRequestUri());
-        // NOTE: This link is only valid while the current Keycloak authentication
-        // session is alive.
-        // Keycloak requires the current flow parameters (like
-        // session_code/execution/tab_id/client_data)
-        // to resume the in-flight authentication. Removing them will typically result
-        // in "Page has expired".
-        builder.replaceQueryParam(EmailConstants.MAGIC_LINK_MARKER_PARAM);
-        builder.replaceQueryParam(EmailConstants.CODE);
-        builder.queryParam(EmailConstants.MAGIC_LINK_MARKER_PARAM, "1");
-        builder.queryParam(EmailConstants.CODE, code);
-        return builder.build().toString();
+        // Build session-independent magic link using custom resource provider
+        UserModel user = context.getUser();
+        RealmModel realm = context.getRealm();
+        String clientId = context.getAuthenticationSession().getClient().getClientId();
+
+        UriBuilder builder = UriBuilder.fromUri(context.getSession().getContext().getUri().getBaseUri())
+                .path("realms/{realm}/email-magic-link/verify")
+                .queryParam("user", user.getId())
+                .queryParam("code", code)
+                .queryParam("client", clientId);
+
+        return builder.build(realm.getName()).toString();
     }
 }
