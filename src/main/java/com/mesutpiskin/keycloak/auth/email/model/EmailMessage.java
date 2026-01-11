@@ -32,9 +32,7 @@ public final class EmailMessage {
         this.subject = Objects.requireNonNull(builder.subject, "Email subject cannot be null");
         this.htmlBody = builder.htmlBody;
         this.textBody = builder.textBody;
-        this.templateData = builder.templateData != null
-                ? Collections.unmodifiableMap(new HashMap<>(builder.templateData))
-                : Collections.emptyMap();
+        this.templateData = new HashMap<>(builder.templateData);
     }
 
     public String getTo() {
@@ -82,6 +80,7 @@ public final class EmailMessage {
         private Map<String, Object> templateData;
 
         private Builder() {
+            this.templateData = new HashMap<>();
         }
 
         /**
