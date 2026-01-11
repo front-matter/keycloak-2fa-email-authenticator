@@ -510,6 +510,7 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
     }
 
     private String buildMagicLink(AuthenticationFlowContext context, String code) {
+        // Use form action URL which has correct parameters
         UriBuilder builder = UriBuilder.fromUri(context.getActionUrl(context.getExecution().getId()));
         builder.queryParam(EmailConstants.MAGIC_LINK_MARKER_PARAM, "1");
         builder.queryParam(EmailConstants.CODE, code);
