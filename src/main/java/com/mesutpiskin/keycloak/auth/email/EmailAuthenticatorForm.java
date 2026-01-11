@@ -165,6 +165,8 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
         // Token is valid - clear it and complete authentication
         user.removeAttribute("magicLinkToken");
         user.removeAttribute("magicLinkTokenExpiry");
+        user.removeAttribute("magicLinkRedirectUri");
+        user.removeAttribute("magicLinkClientId");
         resetEmailCode(context);
 
         logger.infof("Magic link token validated successfully for user %s", user.getId());
@@ -581,7 +583,16 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
         // Build session-independent magic link using custom resource provider
         UserModel user = context.getUser();
         RealmModel realm = context.getRealm();
+
+        // Store auth context information for later redirect
         String clientId = context.getAuthenticationSession().getClient().getClientId();
+        String redirectUri = context.getAuthenticationSession().getRedirectUri();
+
+        // Store redirect URI in user attributes so the resource provider can use it
+        if (redirectUri != null && !redirectUri.isBlank()) {
+            user.setSingleAttribute("magicLinkRedirectUri", redirectUri);
+        }
+        user.setSingleAttribute("magicLinkClientId", clientId);
 
         UriBuilder builder = UriBuilder.fromUri(context.getSession().getContext().getUri().getBaseUri())
                 .path("realms/{realm}/email-magic-link/verify")

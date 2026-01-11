@@ -118,7 +118,7 @@ public class MagicLinkResourceProvider implements RealmResourceProvider {
     user.removeAttribute("emailCodeExpiresAt");
 
     // Build redirect URL back to the authentication flow
-    URI redirectUri = buildAuthRedirect(realm, client, userId, magicToken);
+    URI redirectUri = buildAuthRedirect(realm, user, magicToken);
     logger.infof("Magic link verification successful for user %s, redirecting to auth flow", userId);
 
     return Response.seeOther(redirectUri).build();
@@ -141,17 +141,33 @@ public class MagicLinkResourceProvider implements RealmResourceProvider {
   /**
    * Builds a redirect URL back to the authentication endpoint.
    * The authenticator will detect the magic link token and auto-authenticate.
+   * Uses stored redirect_uri from user attributes to preserve original auth
+   * context.
    */
-  private URI buildAuthRedirect(RealmModel realm, String clientId, String userId, String magicToken) {
-    return UriBuilder.fromUri(session.getContext().getUri().getBaseUri())
+  private URI buildAuthRedirect(RealmModel realm, UserModel user, String magicToken) {
+    // Retrieve stored auth context
+    String clientId = user.getFirstAttribute("magicLinkClientId");
+    String redirectUri = user.getFirstAttribute("magicLinkRedirectUri");
+
+    UriBuilder builder = UriBuilder.fromUri(session.getContext().getUri().getBaseUri())
         .path("realms/{realm}/protocol/openid-connect/auth")
-        .queryParam("client_id", clientId)
         .queryParam("response_type", "code")
         .queryParam("scope", "openid")
         .queryParam("kc_email_magic", "1")
         .queryParam("magic_token", magicToken)
-        .queryParam("login_hint", userId)
-        .build(realm.getName());
+        .queryParam("login_hint", user.getId());
+
+    // Add client_id if available
+    if (clientId != null && !clientId.isBlank()) {
+      builder.queryParam("client_id", clientId);
+    }
+
+    // Add redirect_uri if available (required by OIDC)
+    if (redirectUri != null && !redirectUri.isBlank()) {
+      builder.queryParam("redirect_uri", redirectUri);
+    }
+
+    return builder.build(realm.getName());
   }
 
   @Override
