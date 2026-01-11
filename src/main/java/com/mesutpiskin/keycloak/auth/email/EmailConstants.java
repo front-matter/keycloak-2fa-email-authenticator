@@ -68,6 +68,26 @@ public final class EmailConstants {
 	 */
 	public static final int DEFAULT_RESEND_COOLDOWN = 30;
 
+	// Magic Link (optional)
+
+	/**
+	 * Configuration key for enabling magic-link login.
+	 * When enabled, the email will include a session-specific link that can
+	 * complete
+	 * the OTP step without manually typing the code.
+	 */
+	public static final String MAGIC_LINK_ENABLED = "magicLinkEnabled";
+
+	/**
+	 * Default magic-link setting (disabled).
+	 */
+	public static final boolean DEFAULT_MAGIC_LINK_ENABLED = false;
+
+	/**
+	 * Query parameter marker used to distinguish magic-link requests.
+	 */
+	public static final String MAGIC_LINK_MARKER_PARAM = "kc_email_magic";
+
 	// Email Provider Configuration
 
 	/**

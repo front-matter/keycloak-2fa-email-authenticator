@@ -137,6 +137,7 @@ public class SendGridEmailSender implements EmailSender {
         Object username = message.getTemplateData().get("username");
         Object code = message.getTemplateData().get("code");
         Object ttl = message.getTemplateData().get("ttl");
+        Object magicLink = message.getTemplateData().get("magicLink");
 
         if (username != null) {
             textContent.append("Hello ").append(username).append(",\n\n");
@@ -144,6 +145,10 @@ public class SendGridEmailSender implements EmailSender {
 
         if (code != null) {
             textContent.append("Your verification code is: ").append(code).append("\n\n");
+        }
+
+        if (magicLink != null) {
+            textContent.append("Or continue with this link: ").append(magicLink).append("\n\n");
         }
 
         if (ttl != null) {

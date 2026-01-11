@@ -232,6 +232,20 @@ Create a custom authentication flow with email OTP:
 
 ![Authentication Flow Example](docs/img/otp-form.png)
 
+### Magic Link (Optional)
+
+In addition to entering the OTP manually, you can enable a **Magic Link**. When enabled, the verification email will include a session-specific link that can complete the Email OTP step when opened.
+
+**Enable it:**
+1. Navigate to **Authentication** → **Flows**
+2. Open your flow and click the **⚙️ (gear/settings)** icon next to **Email OTP**
+3. Set **Magic Link** = **true**
+
+**Notes:**
+- The magic link uses the same TTL as the OTP and becomes invalid after expiration.
+- The link contains the OTP as a URL parameter, so use HTTPS and avoid leaking URLs via logs.
+- It typically works best when opened in the **same browser/device session** where the login was initiated.
+
 ### Email Provider Configuration
 
 The authenticator supports multiple email service providers for enhanced flexibility and reliability.

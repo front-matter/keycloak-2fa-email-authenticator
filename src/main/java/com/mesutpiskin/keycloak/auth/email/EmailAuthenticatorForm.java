@@ -23,6 +23,7 @@ import org.keycloak.credential.CredentialProvider;
 import org.jboss.logging.Logger;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriBuilder;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -70,7 +71,51 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
      */
     @Override
     public void authenticate(AuthenticationFlowContext context) {
+        UserModel userModel = context.getUser();
+        if (userModel != null && enabledUser(context, userModel) && tryMagicLink(context, userModel)) {
+            return;
+        }
+
         context.challenge(challenge(context, null));
+    }
+
+    private boolean tryMagicLink(AuthenticationFlowContext context, UserModel user) {
+        AuthenticatorConfigModel config = context.getAuthenticatorConfig();
+        Map<String, String> configValues = config != null && config.getConfig() != null
+                ? config.getConfig()
+                : Map.of();
+
+        boolean magicEnabled = Boolean
+                .parseBoolean(configValues.getOrDefault(EmailConstants.MAGIC_LINK_ENABLED,
+                        String.valueOf(EmailConstants.DEFAULT_MAGIC_LINK_ENABLED)));
+        if (!magicEnabled) {
+            return false;
+        }
+
+        MultivaluedMap<String, String> queryParams = context.getHttpRequest().getUri().getQueryParameters();
+        String marker = queryParams.getFirst(EmailConstants.MAGIC_LINK_MARKER_PARAM);
+        String submitted = queryParams.getFirst(EmailConstants.CODE);
+        if (!"1".equals(marker) || submitted == null || submitted.isBlank()) {
+            return false;
+        }
+
+        CodeContext codeContext = buildCodeContext(context.getAuthenticationSession(), submitted.strip());
+        if (codeContext.storedCode() == null || codeContext.expiresAt() == null) {
+            return false;
+        }
+
+        if (codeContext.expiresAt() < System.currentTimeMillis()) {
+            return false;
+        }
+
+        if (codeContext.submittedCode().equals(codeContext.storedCode())) {
+            resetEmailCode(context);
+            context.success();
+            return true;
+        }
+
+        // fall back to normal challenge (shows error after submit)
+        return false;
     }
 
     /**
@@ -129,12 +174,21 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
         int resendCooldown = resolvePositiveInt(configValues, EmailConstants.RESEND_COOLDOWN,
                 EmailConstants.DEFAULT_RESEND_COOLDOWN);
 
+        boolean magicEnabled = Boolean
+                .parseBoolean(configValues.getOrDefault(EmailConstants.MAGIC_LINK_ENABLED,
+                        String.valueOf(EmailConstants.DEFAULT_MAGIC_LINK_ENABLED)));
+
         String code = SecretGenerator.getInstance().randomString(length, SecretGenerator.DIGITS);
+        String magicLink = magicEnabled ? buildMagicLink(context, code) : null;
         if (config != null && Boolean.parseBoolean(config.getConfig().get(EmailConstants.SIMULATION_MODE))) {
             logger.infof("***** SIMULATION MODE ***** Email code send to %s for user %s is: %s",
                     context.getUser().getEmail(), context.getUser().getUsername(), code);
+            if (magicLink != null) {
+                logger.infof("***** SIMULATION MODE ***** Magic link for user %s: %s",
+                        context.getUser().getUsername(), magicLink);
+            }
         } else {
-            sendEmailWithCode(context, code, ttl);
+            sendEmailWithCode(context, code, ttl, magicLink);
         }
         session.setAuthNote(EmailConstants.CODE, code);
         long now = System.currentTimeMillis();
@@ -234,6 +288,12 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
     }
 
     private CodeContext buildCodeContext(AuthenticationSessionModel session, MultivaluedMap<String, String> formData) {
+        String submittedRaw = formData.getFirst(EmailConstants.CODE);
+        String submittedCode = submittedRaw == null ? null : submittedRaw.strip();
+        return buildCodeContext(session, submittedCode);
+    }
+
+    private CodeContext buildCodeContext(AuthenticationSessionModel session, String submittedCode) {
         String storedCode = session.getAuthNote(EmailConstants.CODE);
         String ttlNote = session.getAuthNote(EmailConstants.CODE_TTL);
         Long expiresAt = null;
@@ -244,10 +304,6 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
                 logger.warnf("Invalid TTL value '%s' found for email authenticator; treating as expired", ttlNote);
             }
         }
-
-        String submittedRaw = formData.getFirst(EmailConstants.CODE);
-        String submittedCode = submittedRaw == null ? null : submittedRaw.strip();
-
         return new CodeContext(storedCode, expiresAt, submittedCode);
     }
 
@@ -371,7 +427,7 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
         // NOOP
     }
 
-    private void sendEmailWithCode(AuthenticationFlowContext context, String code, int ttl) {
+    private void sendEmailWithCode(AuthenticationFlowContext context, String code, int ttl, String magicLink) {
         KeycloakSession session = context.getSession();
         RealmModel realm = context.getRealm();
         UserModel user = context.getUser();
@@ -387,6 +443,9 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
         templateData.put("username", user.getUsername());
         templateData.put("code", code);
         templateData.put("ttl", ttl);
+        if (magicLink != null) {
+            templateData.put("magicLink", magicLink);
+        }
 
         String realmName = realm.getDisplayName() != null ? realm.getDisplayName() : realm.getName();
         String subject = realmName + " access code";
@@ -448,5 +507,14 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
                         realm.getId(), user.getUsername());
             }
         }
+    }
+
+    private String buildMagicLink(AuthenticationFlowContext context, String code) {
+        UriBuilder builder = UriBuilder.fromUri(context.getUriInfo().getRequestUri());
+        builder.replaceQueryParam(EmailConstants.MAGIC_LINK_MARKER_PARAM);
+        builder.replaceQueryParam(EmailConstants.CODE);
+        builder.queryParam(EmailConstants.MAGIC_LINK_MARKER_PARAM, "1");
+        builder.queryParam(EmailConstants.CODE, code);
+        return builder.build().toString();
     }
 }
