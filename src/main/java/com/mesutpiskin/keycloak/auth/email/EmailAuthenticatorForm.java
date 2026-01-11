@@ -94,6 +94,15 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
 
         MultivaluedMap<String, String> queryParams = context.getHttpRequest().getUri().getQueryParameters();
         String marker = queryParams.getFirst(EmailConstants.MAGIC_LINK_MARKER_PARAM);
+
+        // Check for new token-based magic link (from resource provider)
+        String magicToken = queryParams.getFirst("magic_token");
+        if ("1".equals(marker) && magicToken != null && !magicToken.isBlank()) {
+            return validateMagicToken(context, user, magicToken);
+        }
+
+        // Legacy: Check for old code-based magic link (deprecated, kept for backwards
+        // compatibility)
         String submitted = queryParams.getFirst(EmailConstants.CODE);
         if (!"1".equals(marker) || submitted == null || submitted.isBlank()) {
             return false;
@@ -116,6 +125,51 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
 
         // fall back to normal challenge (shows error after submit)
         return false;
+    }
+
+    /**
+     * Validates the magic link token from the resource provider redirect.
+     * This is the new token-based approach that works across sessions.
+     */
+    private boolean validateMagicToken(AuthenticationFlowContext context, UserModel user, String magicToken) {
+        String storedToken = user.getFirstAttribute("magicLinkToken");
+        String expiryStr = user.getFirstAttribute("magicLinkTokenExpiry");
+
+        if (storedToken == null || expiryStr == null) {
+            logger.warnf("No magic link token found for user: %s", user.getId());
+            return false;
+        }
+
+        // Validate expiration
+        try {
+            long expiry = Long.parseLong(expiryStr);
+            if (System.currentTimeMillis() > expiry) {
+                logger.warnf("Magic link token expired for user %s", user.getId());
+                user.removeAttribute("magicLinkToken");
+                user.removeAttribute("magicLinkTokenExpiry");
+                return false;
+            }
+        } catch (NumberFormatException e) {
+            logger.errorf("Invalid magic link token expiry for user %s: %s", user.getId(), expiryStr);
+            user.removeAttribute("magicLinkToken");
+            user.removeAttribute("magicLinkTokenExpiry");
+            return false;
+        }
+
+        // Validate token
+        if (!storedToken.equals(magicToken)) {
+            logger.warnf("Invalid magic link token for user %s", user.getId());
+            return false;
+        }
+
+        // Token is valid - clear it and complete authentication
+        user.removeAttribute("magicLinkToken");
+        user.removeAttribute("magicLinkTokenExpiry");
+        resetEmailCode(context);
+
+        logger.infof("Magic link token validated successfully for user %s", user.getId());
+        context.success();
+        return true;
     }
 
     /**

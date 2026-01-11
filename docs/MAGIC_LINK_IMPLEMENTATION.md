@@ -60,41 +60,75 @@ UriBuilder builder = UriBuilder.fromUri(baseUri)
     .queryParam("client", clientId);
 ```
 
-### 3. Magic Link Verification (MagicLinkResourceProvider)
+### 3. Magic Link Verification Flow
 
-When user clicks the magic link:
+**Step 1: User clicks magic link → hits `/realms/{realm}/email-magic-link/verify`**
 
-1. **Validate Parameters**: Check user ID and code are present
-2. **Find User**: Lookup user by ID in Keycloak
-3. **Retrieve Stored Code**: Get code and expiration from user attributes
-4. **Validate Expiration**: Check if code has expired
-5. **Validate Code**: Compare submitted code with stored code
-6. **Clear Code**: Remove attributes to prevent reuse
-7. **Redirect**: Continue authentication flow or show success
+`MagicLinkResourceProvider` validates the code:
+1. ✓ Validate user exists
+2. ✓ Check code matches stored code in user attributes
+3. ✓ Verify code hasn't expired
+4. ✓ Generate a short-lived magic token (UUID, 5 min expiry)
+5. ✓ Store magic token in user attributes
+6. ✓ Clear original code (prevent reuse)
+7. ↪️ Redirect to auth flow with magic token
+
+**Redirect URL:**
+```
+/realms/{realm}/protocol/openid-connect/auth?
+  client_id={clientId}&
+  response_type=code&
+  scope=openid&
+  kc_email_magic=1&
+  magic_token={uuid}&
+  login_hint={userId}
+```
+
+**Step 2: Auth flow receives magic token → `EmailAuthenticatorForm.authenticate()`**
+
+`tryMagicLink()` detects the magic token parameter:
+1. ✓ Extract `magic_token` from query params
+2. ✓ Validate token matches stored token in user attributes
+3. ✓ Verify token hasn't expired (5 min window)
+4. ✓ Clear magic token (one-time use)
+5. ✓ Call `context.success()` → **Authentication complete!**
 
 ### 4. Code Cleanup
-Codes are automatically cleaned up:
-- ✅ After successful verification (one-time use)
-- ✅ After manual code entry
-- ✅ When user requests a new code (resend)
+Codes and tokens are automatically cleaned up:
+- ✅ Original code cleared after magic link verification (prevent reuse)
+- ✅ Magic token cleared after auth completion (one-time use)
+- ✅ All attributes cleared after manual code entry
+- ✅ Expired codes/tokens cleaned up on validation attempts
 
 ## Security Features
 
-### 1. **One-Time Use**
-Codes are deleted immediately after successful verification.
+### 1. **Two-Stage Verification**
+- **Stage 1**: Email code validation (stored in user attributes, TTL: 15 min)
+- **Stage 2**: Magic token validation (ephemeral token, TTL: 5 min)
+- This prevents replay attacks and ensures security across session boundaries
 
-### 2. **Expiration**
-Codes expire after the configured TTL (default: 15 minutes).
+### 2. **One-Time Use**
+- Email codes are deleted after magic token generation
+- Magic tokens are deleted after successful authentication
+- Each magic link can only be used once
 
-### 3. **User Binding**
-Magic links are bound to specific user IDs - cannot be used by other users.
+### 3. **Expiration**
+- Email codes expire after configured TTL (default: 15 minutes)
+- Magic tokens expire after 5 minutes (short window to complete auth)
 
-### 4. **Code Validation**
+### 4. **User Binding**
+- Magic links are bound to specific user IDs
+- Tokens cannot be used by other users
+- login_hint parameter ensures correct user context
+
+### 5. **Code Validation**
 Full validation chain:
 - User exists ✓
 - Code exists in user attributes ✓
 - Code has not expired ✓
 - Submitted code matches stored code ✓
+- Magic token matches stored token ✓
+- Magic token has not expired ✓
 
 ## Configuration
 

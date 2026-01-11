@@ -90,12 +90,14 @@ public class MagicLinkResourceProvider implements RealmResourceProvider {
       long expiresAt = Long.parseLong(expiresAtStr);
       if (System.currentTimeMillis() > expiresAt) {
         logger.warnf("Code expired for user %s (expired at %d)", userId, expiresAt);
-        clearUserCode(user);
+        user.removeAttribute(EmailConstants.CODE);
+        user.removeAttribute("emailCodeExpiresAt");
         return buildErrorResponse("Verification code has expired");
       }
     } catch (NumberFormatException e) {
       logger.errorf("Invalid expiration timestamp for user %s: %s", userId, expiresAtStr);
-      clearUserCode(user);
+      user.removeAttribute(EmailConstants.CODE);
+      user.removeAttribute("emailCodeExpiresAt");
       return buildErrorResponse("Invalid verification data");
     }
 
@@ -105,22 +107,21 @@ public class MagicLinkResourceProvider implements RealmResourceProvider {
       return buildErrorResponse("Invalid verification code");
     }
 
-    // Code is valid - clear it to prevent reuse
-    clearUserCode(user);
+    // Code is valid - store a verified magic link token with short expiration
+    long tokenExpiry = System.currentTimeMillis() + (5 * 60 * 1000L); // 5 minutes
+    String magicToken = java.util.UUID.randomUUID().toString();
+    user.setSingleAttribute("magicLinkToken", magicToken);
+    user.setSingleAttribute("magicLinkTokenExpiry", String.valueOf(tokenExpiry));
 
-    // Build success redirect URL
-    URI redirectUri = buildSuccessRedirect(realm, client, userId);
-    logger.infof("Magic link verification successful for user %s, redirecting to: %s", userId, redirectUri);
-
-    return Response.seeOther(redirectUri).build();
-  }
-
-  /**
-   * Clears the email code and expiration timestamp from user attributes.
-   */
-  private void clearUserCode(UserModel user) {
+    // Clear the original code to prevent reuse
     user.removeAttribute(EmailConstants.CODE);
     user.removeAttribute("emailCodeExpiresAt");
+
+    // Build redirect URL back to the authentication flow
+    URI redirectUri = buildAuthRedirect(realm, client, userId, magicToken);
+    logger.infof("Magic link verification successful for user %s, redirecting to auth flow", userId);
+
+    return Response.seeOther(redirectUri).build();
   }
 
   /**
@@ -138,18 +139,18 @@ public class MagicLinkResourceProvider implements RealmResourceProvider {
   }
 
   /**
-   * Builds a success redirect URL that continues the authentication flow.
-   * <p>
-   * This creates a new authentication session and marks the email verification as
-   * completed.
-   * </p>
+   * Builds a redirect URL back to the authentication endpoint.
+   * The authenticator will detect the magic link token and auto-authenticate.
    */
-  private URI buildSuccessRedirect(RealmModel realm, String clientId, String userId) {
-    // For now, redirect to account page - in production, this should create
-    // a new auth session and continue the flow
+  private URI buildAuthRedirect(RealmModel realm, String clientId, String userId, String magicToken) {
     return UriBuilder.fromUri(session.getContext().getUri().getBaseUri())
-        .path("realms/{realm}/account")
-        .queryParam("magic_link_success", "true")
+        .path("realms/{realm}/protocol/openid-connect/auth")
+        .queryParam("client_id", clientId)
+        .queryParam("response_type", "code")
+        .queryParam("scope", "openid")
+        .queryParam("kc_email_magic", "1")
+        .queryParam("magic_token", magicToken)
+        .queryParam("login_hint", userId)
         .build(realm.getName());
   }
 
