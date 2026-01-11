@@ -72,6 +72,24 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
     @Override
     public void authenticate(AuthenticationFlowContext context) {
         UserModel userModel = context.getUser();
+
+        // For magic link flow, extract user from login_hint if not in context
+        if (userModel == null) {
+            MultivaluedMap<String, String> queryParams = context.getHttpRequest().getUri().getQueryParameters();
+            String magicToken = queryParams.getFirst("magic_token");
+            String marker = queryParams.getFirst(EmailConstants.MAGIC_LINK_MARKER_PARAM);
+
+            if ("1".equals(marker) && magicToken != null && !magicToken.isBlank()) {
+                String loginHint = queryParams.getFirst("login_hint");
+                if (loginHint != null && !loginHint.isBlank()) {
+                    userModel = context.getSession().users().getUserByUsername(context.getRealm(), loginHint);
+                    if (userModel != null) {
+                        context.setUser(userModel);
+                    }
+                }
+            }
+        }
+
         if (userModel != null && enabledUser(context, userModel) && tryMagicLink(context, userModel)) {
             return;
         }

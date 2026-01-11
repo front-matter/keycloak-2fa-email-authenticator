@@ -155,7 +155,7 @@ public class MagicLinkResourceProvider implements RealmResourceProvider {
         .queryParam("scope", "openid")
         .queryParam("kc_email_magic", "1")
         .queryParam("magic_token", magicToken)
-        .queryParam("login_hint", user.getId());
+        .queryParam("login_hint", user.getUsername());
 
     // Add client_id if available
     if (clientId != null && !clientId.isBlank()) {
