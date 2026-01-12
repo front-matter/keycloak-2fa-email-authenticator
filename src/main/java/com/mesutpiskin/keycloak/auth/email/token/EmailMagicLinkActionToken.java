@@ -69,8 +69,9 @@ public class EmailMagicLinkActionToken extends DefaultActionToken {
     this.responseMode = responseMode;
   }
 
-  private EmailMagicLinkActionToken() {
-    // Required for deserialization
+  public EmailMagicLinkActionToken() {
+    // Required for Jackson deserialization - must be public
+    super();
   }
 
   public String getRedirectUri() {
