@@ -530,13 +530,14 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
                 codeChallengeMethod,
                 responseMode);
 
-        // Serialize token with realm context switching (critical for correct JWT signature)
+        // Serialize token with realm context switching (critical for correct JWT
+        // signature)
         // Store current realm context
         RealmModel currentRealm = session.getContext().getRealm();
-        
+
         // Temporarily set target realm for token signing
         session.getContext().setRealm(realm);
-        
+
         try {
             String tokenString = token.serialize(session, realm, session.getContext().getUri());
             UriBuilder builder = Urls.realmBase(session.getContext().getUri().getBaseUri())
