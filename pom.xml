@@ -14,7 +14,7 @@
         <java.version>21</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
-        <keycloak.version>26.0.0</keycloak.version>
+        <keycloak.version>26.5.0</keycloak.version>
         <maven-jar.plugin.version>3.4.2</maven-jar.plugin.version>
         <netty.version>4.1.124.Final</netty.version>
     </properties>
