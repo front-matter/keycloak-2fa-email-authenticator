@@ -71,8 +71,8 @@ public class EmailMagicLinkActionToken extends DefaultActionToken {
   }
 
   private EmailMagicLinkActionToken() {
-    // Required for Jackson deserialization
-    super();
+    // Note that the class must have a private constructor without any arguments. This is necessary
+    // to deserialize the token class from JWT.
   }
 
   public String getRedirectUri() {
