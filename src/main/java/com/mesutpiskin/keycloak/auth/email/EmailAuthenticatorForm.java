@@ -530,14 +530,25 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
                 codeChallengeMethod,
                 responseMode);
 
-        // Serialize token and build URL
-        String tokenString = token.serialize(session, realm, session.getContext().getUri());
-        UriBuilder builder = Urls.realmBase(session.getContext().getUri().getBaseUri())
-                .path(RealmsResource.class, "getLoginActionsService")
-                .path(LoginActionsService.class, "executeActionToken")
-                .queryParam(Constants.KEY, tokenString)
-                .queryParam(Constants.CLIENT_ID, clientId);
+        // Serialize token with realm context switching (critical for correct JWT signature)
+        // Store current realm context
+        RealmModel currentRealm = session.getContext().getRealm();
+        
+        // Temporarily set target realm for token signing
+        session.getContext().setRealm(realm);
+        
+        try {
+            String tokenString = token.serialize(session, realm, session.getContext().getUri());
+            UriBuilder builder = Urls.realmBase(session.getContext().getUri().getBaseUri())
+                    .path(RealmsResource.class, "getLoginActionsService")
+                    .path(LoginActionsService.class, "executeActionToken")
+                    .queryParam(Constants.KEY, tokenString)
+                    .queryParam(Constants.CLIENT_ID, clientId);
 
-        return builder.build(realm.getName()).toString();
+            return builder.build(realm.getName()).toString();
+        } finally {
+            // Always restore original realm context
+            session.getContext().setRealm(currentRealm);
+        }
     }
 }
