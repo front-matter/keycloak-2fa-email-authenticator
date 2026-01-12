@@ -71,7 +71,8 @@ public class EmailMagicLinkActionToken extends DefaultActionToken {
   }
 
   private EmailMagicLinkActionToken() {
-    // Note that the class must have a private constructor without any arguments. This is necessary
+    // Note that the class must have a private constructor without any arguments.
+    // This is necessary
     // to deserialize the token class from JWT.
   }
 
