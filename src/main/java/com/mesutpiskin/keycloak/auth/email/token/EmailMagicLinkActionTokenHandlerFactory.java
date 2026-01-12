@@ -1,6 +1,7 @@
 package com.mesutpiskin.keycloak.auth.email.token;
 
 import com.google.auto.service.AutoService;
+import org.jboss.logging.Logger;
 import org.keycloak.Config;
 import org.keycloak.authentication.actiontoken.ActionTokenHandlerFactory;
 import org.keycloak.models.KeycloakSession;
@@ -20,10 +21,13 @@ import org.keycloak.models.KeycloakSessionFactory;
 public class EmailMagicLinkActionTokenHandlerFactory
     implements ActionTokenHandlerFactory<EmailMagicLinkActionToken> {
 
+  private static final Logger logger = Logger.getLogger(EmailMagicLinkActionTokenHandlerFactory.class);
+  
   public static final String PROVIDER_ID = "email-magic-link";
 
   @Override
   public EmailMagicLinkActionTokenHandler create(KeycloakSession session) {
+    logger.infof("Creating EmailMagicLinkActionTokenHandler");
     return new EmailMagicLinkActionTokenHandler();
   }
 
@@ -34,12 +38,12 @@ public class EmailMagicLinkActionTokenHandlerFactory
 
   @Override
   public void init(Config.Scope config) {
-    // No initialization needed
+    logger.infof("Initializing EmailMagicLinkActionTokenHandlerFactory with ID: %s", PROVIDER_ID);
   }
 
   @Override
   public void postInit(KeycloakSessionFactory factory) {
-    // No post-initialization needed
+    logger.infof("Post-initializing EmailMagicLinkActionTokenHandlerFactory");
   }
 
   @Override
