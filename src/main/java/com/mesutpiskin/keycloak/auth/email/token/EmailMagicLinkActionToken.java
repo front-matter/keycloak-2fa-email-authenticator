@@ -2,6 +2,7 @@ package com.mesutpiskin.keycloak.auth.email.token;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.jboss.logging.Logger;
 import org.keycloak.authentication.actiontoken.DefaultActionToken;
 
 /**
@@ -16,6 +17,8 @@ import org.keycloak.authentication.actiontoken.DefaultActionToken;
  * @since 26.1.0
  */
 public class EmailMagicLinkActionToken extends DefaultActionToken {
+
+  private static final Logger logger = Logger.getLogger(EmailMagicLinkActionToken.class);
 
   public static final String TOKEN_TYPE = "email-magic-link";
 
@@ -71,9 +74,9 @@ public class EmailMagicLinkActionToken extends DefaultActionToken {
   }
 
   private EmailMagicLinkActionToken() {
+    logger.infof("DESERIALIZATION: Private no-args constructor called for EmailMagicLinkActionToken");
     // Note that the class must have a private constructor without any arguments.
-    // This is necessary
-    // to deserialize the token class from JWT.
+    // This is necessary to deserialize the token class from JWT.
   }
 
   public String getRedirectUri() {
