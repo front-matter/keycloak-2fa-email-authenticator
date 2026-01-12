@@ -529,6 +529,9 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
                 codeChallengeMethod,
                 responseMode);
 
+        logger.warnf("[DEBUG] Created EmailMagicLinkActionToken: userId=%s, clientId=%s, exp=%d, typ=%s",
+                user.getId(), clientId, absoluteExpirationInSecs, EmailMagicLinkActionToken.TOKEN_TYPE);
+
         // Serialize token with realm context switching (critical for correct JWT
         // signature)
         // Store current realm context
@@ -539,13 +542,18 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
 
         try {
             String tokenString = token.serialize(session, realm, session.getContext().getUri());
+            logger.warnf("[DEBUG] Token serialized successfully. Length: %d, First 50 chars: %s",
+                    tokenString.length(), tokenString.substring(0, Math.min(50, tokenString.length())));
+
             UriBuilder builder = Urls.realmBase(session.getContext().getUri().getBaseUri())
                     .path(RealmsResource.class, "getLoginActionsService")
                     .path(LoginActionsService.class, "executeActionToken")
                     .queryParam(Constants.KEY, tokenString)
                     .queryParam(Constants.CLIENT_ID, clientId);
 
-            return builder.build(realm.getName()).toString();
+            String magicLinkUrl = builder.build(realm.getName()).toString();
+            logger.warnf("[DEBUG] Magic link URL generated: %s", magicLinkUrl);
+            return magicLinkUrl;
         } finally {
             // Always restore original realm context
             session.getContext().setRealm(currentRealm);
