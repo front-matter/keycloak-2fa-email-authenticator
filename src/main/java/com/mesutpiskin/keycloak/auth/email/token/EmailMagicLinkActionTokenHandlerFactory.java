@@ -22,7 +22,7 @@ public class EmailMagicLinkActionTokenHandlerFactory
     implements ActionTokenHandlerFactory<EmailMagicLinkActionToken> {
 
   private static final Logger logger = Logger.getLogger(EmailMagicLinkActionTokenHandlerFactory.class);
-  
+
   public static final String PROVIDER_ID = "email-magic-link";
 
   @Override
