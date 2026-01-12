@@ -43,6 +43,24 @@ public class EmailMagicLinkActionTokenHandler
   }
 
   @Override
+  public boolean canUseTokenRepeatedly(
+      EmailMagicLinkActionToken token,
+      ActionTokenContext<EmailMagicLinkActionToken> tokenContext) {
+    // Magic links are one-time use only
+    return false;
+  }
+
+  @Override
+  public String getAuthenticationSessionIdFromToken(
+      EmailMagicLinkActionToken token,
+      ActionTokenContext<EmailMagicLinkActionToken> tokenContext,
+      AuthenticationSessionModel currentAuthSession) {
+    // We don't store auth session ID in the token
+    // ActionToken framework will create a fresh session
+    return null;
+  }
+
+  @Override
   public AuthenticationSessionModel startFreshAuthenticationSession(
       EmailMagicLinkActionToken token,
       ActionTokenContext<EmailMagicLinkActionToken> tokenContext) {

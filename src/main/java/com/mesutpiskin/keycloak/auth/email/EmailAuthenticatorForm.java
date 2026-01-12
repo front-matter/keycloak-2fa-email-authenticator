@@ -502,6 +502,13 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
         String codeChallengeMethod = authSession.getClientNote(OIDCLoginProtocol.CODE_CHALLENGE_METHOD_PARAM);
         String responseMode = authSession.getClientNote(OIDCLoginProtocol.RESPONSE_MODE_PARAM);
 
+        // Generate a nonce if not present (required by Keycloak's ActionToken
+        // validation)
+        if (nonce == null || nonce.isBlank()) {
+            nonce = SecretGenerator.getInstance().randomString(32);
+            logger.infof("Generated nonce for magic link: %s", nonce);
+        }
+
         // Get TTL from config
         AuthenticatorConfigModel config = context.getAuthenticatorConfig();
         Map<String, String> configValues = config != null && config.getConfig() != null
