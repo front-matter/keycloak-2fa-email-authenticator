@@ -6,6 +6,7 @@ import org.keycloak.authentication.actiontoken.AbstractActionTokenHandler;
 import org.keycloak.authentication.actiontoken.ActionTokenContext;
 import org.keycloak.events.Errors;
 import org.keycloak.events.EventType;
+import org.keycloak.forms.login.LoginFormsProvider;
 import org.keycloak.models.ClientModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
@@ -52,52 +53,72 @@ public class EmailMagicLinkActionTokenHandler
   public Response handleToken(
       EmailMagicLinkActionToken token,
       ActionTokenContext<EmailMagicLinkActionToken> tokenContext) {
-    logger.debugf("handleToken for client:%s, user:%s", token.getIssuedFor(), token.getUserId());
+    logger.infof("handleToken for client:%s, user:%s", token.getIssuedFor(), token.getUserId());
 
-    UserModel user = tokenContext.getAuthenticationSession().getAuthenticatedUser();
     final AuthenticationSessionModel authSession = tokenContext.getAuthenticationSession();
     final ClientModel client = authSession.getClient();
+
+    // Get user from token and set as authenticated
+    UserModel user = tokenContext.getAuthenticationSession().getAuthenticatedUser();
+    if (user == null) {
+      logger.warnf("User not set in auth session, loading from token userId: %s", token.getUserId());
+      user = tokenContext.getSession().users().getUserById(tokenContext.getRealm(), token.getUserId());
+      if (user == null) {
+        logger.errorf("User not found: %s", token.getUserId());
+        return tokenContext.getSession().getProvider(LoginFormsProvider.class)
+            .setError(Messages.INVALID_USER)
+            .createErrorPage(Response.Status.BAD_REQUEST);
+      }
+      authSession.setAuthenticatedUser(user);
+    }
 
     // Resolve redirect URI
     final String redirectUri = token.getRedirectUri() != null
         ? token.getRedirectUri()
         : ResolveRelative.resolveRelativeUri(
             tokenContext.getSession(), client.getRootUrl(), client.getBaseUrl());
-    logger.debugf("Using redirect_uri %s", redirectUri);
+    logger.infof("Using redirect_uri %s", redirectUri);
 
     // Validate redirect URI
     String redirect = RedirectUtils.verifyRedirectUri(
         tokenContext.getSession(), redirectUri, client);
-    if (redirect != null) {
-      authSession.setAuthNote(
-          AuthenticationManager.SET_REDIRECT_URI_AFTER_REQUIRED_ACTIONS, "true");
-      authSession.setRedirectUri(redirect);
-      authSession.setClientNote(OIDCLoginProtocol.REDIRECT_URI_PARAM, redirectUri);
+    if (redirect == null) {
+      logger.errorf("Invalid redirect URI: %s", redirectUri);
+      return tokenContext.getSession().getProvider(LoginFormsProvider.class)
+          .setError(Messages.INVALID_REDIRECT_URI)
+          .createErrorPage(Response.Status.BAD_REQUEST);
+    }
 
-      // Set OAuth2/OIDC parameters
-      if (token.getState() != null) {
-        authSession.setClientNote(OIDCLoginProtocol.STATE_PARAM, token.getState());
-      }
-      if (token.getNonce() != null) {
-        authSession.setClientNote(OIDCLoginProtocol.NONCE_PARAM, token.getNonce());
-      }
-      if (token.getScope() != null) {
-        authSession.setClientNote(OIDCLoginProtocol.SCOPE_PARAM, token.getScope());
-      }
-      if (token.getCodeChallenge() != null) {
-        authSession.setClientNote(OIDCLoginProtocol.CODE_CHALLENGE_PARAM, token.getCodeChallenge());
-      }
-      if (token.getCodeChallengeMethod() != null) {
-        authSession.setClientNote(OIDCLoginProtocol.CODE_CHALLENGE_METHOD_PARAM,
-            token.getCodeChallengeMethod());
-      }
-      if (token.getResponseMode() != null) {
-        authSession.setClientNote(OIDCLoginProtocol.RESPONSE_MODE_PARAM, token.getResponseMode());
-      }
+    authSession.setAuthNote(
+        AuthenticationManager.SET_REDIRECT_URI_AFTER_REQUIRED_ACTIONS, "true");
+    authSession.setRedirectUri(redirect);
+    authSession.setClientNote(OIDCLoginProtocol.REDIRECT_URI_PARAM, redirectUri);
+
+    // Set OAuth2/OIDC parameters
+    if (token.getState() != null) {
+      authSession.setClientNote(OIDCLoginProtocol.STATE_PARAM, token.getState());
+    }
+    if (token.getNonce() != null) {
+      authSession.setClientNote(OIDCLoginProtocol.NONCE_PARAM, token.getNonce());
+    }
+    if (token.getScope() != null) {
+      authSession.setClientNote(OIDCLoginProtocol.SCOPE_PARAM, token.getScope());
+    }
+    if (token.getCodeChallenge() != null) {
+      authSession.setClientNote(OIDCLoginProtocol.CODE_CHALLENGE_PARAM, token.getCodeChallenge());
+    }
+    if (token.getCodeChallengeMethod() != null) {
+      authSession.setClientNote(OIDCLoginProtocol.CODE_CHALLENGE_METHOD_PARAM,
+          token.getCodeChallengeMethod());
+    }
+    if (token.getResponseMode() != null) {
+      authSession.setClientNote(OIDCLoginProtocol.RESPONSE_MODE_PARAM, token.getResponseMode());
     }
 
     // Set email as verified since user clicked link in email
     user.setEmailVerified(true);
+
+    logger.infof("Email verified and auth session configured for user: %s", user.getUsername());
 
     // Proceed with authentication flow
     String nextAction = AuthenticationManager.nextRequiredAction(
