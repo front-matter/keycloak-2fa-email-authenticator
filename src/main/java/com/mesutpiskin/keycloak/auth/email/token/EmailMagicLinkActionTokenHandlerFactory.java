@@ -44,6 +44,9 @@ public class EmailMagicLinkActionTokenHandlerFactory
   @Override
   public void postInit(KeycloakSessionFactory factory) {
     logger.infof("Post-initializing EmailMagicLinkActionTokenHandlerFactory");
+    logger.infof("EmailMagicLinkActionTokenHandlerFactory registered with PROVIDER_ID: %s for token type: %s",
+        PROVIDER_ID, EmailMagicLinkActionToken.TOKEN_TYPE);
+    logger.infof("Token class: %s", EmailMagicLinkActionToken.class.getName());
   }
 
   @Override
