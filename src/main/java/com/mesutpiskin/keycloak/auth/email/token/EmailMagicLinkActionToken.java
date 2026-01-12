@@ -75,7 +75,7 @@ public class EmailMagicLinkActionToken extends DefaultActionToken {
 
   public EmailMagicLinkActionToken() {
     super();
-    logger.infof("DESERIALIZATION: No-args constructor called for EmailMagicLinkActionToken");
+    logger.warnf("[DEBUG] DESERIALIZATION: No-args constructor called for EmailMagicLinkActionToken");
     // Note that the class must have a no-args constructor.
     // This is necessary to deserialize the token class from JWT.
   }

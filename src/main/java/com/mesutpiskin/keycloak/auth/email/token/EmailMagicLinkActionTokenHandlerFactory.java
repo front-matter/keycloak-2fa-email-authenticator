@@ -27,10 +27,10 @@ public class EmailMagicLinkActionTokenHandlerFactory
 
   @Override
   public EmailMagicLinkActionTokenHandler create(KeycloakSession session) {
-    logger.infof("Creating EmailMagicLinkActionTokenHandler for session: %s",
+    logger.warnf("[DEBUG] Creating EmailMagicLinkActionTokenHandler for session: %s",
         session != null ? session.hashCode() : "null");
     EmailMagicLinkActionTokenHandler handler = new EmailMagicLinkActionTokenHandler();
-    logger.infof("EmailMagicLinkActionTokenHandler instance created: %s", handler.getClass().getName());
+    logger.warnf("[DEBUG] EmailMagicLinkActionTokenHandler instance created: %s", handler.getClass().getName());
     return handler;
   }
 
