@@ -1,20 +1,27 @@
 package com.mesutpiskin.keycloak.auth.email;
 
+import com.mesutpiskin.keycloak.auth.email.token.EmailMagicLinkActionToken;
 import org.keycloak.authentication.AuthenticationFlowContext;
 import org.keycloak.authentication.AuthenticationFlowError;
 import org.keycloak.authentication.AuthenticationFlowException;
 import org.keycloak.authentication.CredentialValidator;
 import org.keycloak.authentication.RequiredActionFactory;
 import org.keycloak.authentication.RequiredActionProvider;
+import org.keycloak.common.util.Time;
 import org.keycloak.email.EmailException;
 import org.keycloak.events.Errors;
 import org.keycloak.forms.login.LoginFormsProvider;
 import org.keycloak.models.AuthenticatorConfigModel;
+import org.keycloak.models.Constants;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.utils.FormMessage;
+import org.keycloak.protocol.oidc.OIDCLoginProtocol;
+import org.keycloak.services.Urls;
 import org.keycloak.services.messages.Messages;
+import org.keycloak.services.resources.LoginActionsService;
+import org.keycloak.services.resources.RealmsResource;
 import org.keycloak.sessions.AuthenticationSessionModel;
 import org.keycloak.authentication.authenticators.browser.AbstractUsernameFormAuthenticator;
 import org.keycloak.common.util.SecretGenerator;
@@ -71,133 +78,7 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
      */
     @Override
     public void authenticate(AuthenticationFlowContext context) {
-        UserModel userModel = context.getUser();
-
-        // For magic link flow, extract user from login_hint if not in context
-        if (userModel == null) {
-            MultivaluedMap<String, String> queryParams = context.getHttpRequest().getUri().getQueryParameters();
-            String magicToken = queryParams.getFirst("magic_token");
-            String marker = queryParams.getFirst(EmailConstants.MAGIC_LINK_MARKER_PARAM);
-
-            if ("1".equals(marker) && magicToken != null && !magicToken.isBlank()) {
-                String loginHint = queryParams.getFirst("login_hint");
-                if (loginHint != null && !loginHint.isBlank()) {
-                    userModel = context.getSession().users().getUserByUsername(context.getRealm(), loginHint);
-                    if (userModel != null) {
-                        context.setUser(userModel);
-                    }
-                }
-            }
-        }
-
-        if (userModel != null && enabledUser(context, userModel) && tryMagicLink(context, userModel)) {
-            return;
-        }
-
         context.challenge(challenge(context, null));
-    }
-
-    private boolean tryMagicLink(AuthenticationFlowContext context, UserModel user) {
-        MultivaluedMap<String, String> queryParams = context.getHttpRequest().getUri().getQueryParameters();
-        String marker = queryParams.getFirst(EmailConstants.MAGIC_LINK_MARKER_PARAM);
-
-        // Check for new token-based magic link (from resource provider)
-        // Always process magic_token if present, regardless of magicEnabled config
-        // because the token was already validated by MagicLinkResourceProvider
-        String magicToken = queryParams.getFirst("magic_token");
-        if ("1".equals(marker) && magicToken != null && !magicToken.isBlank()) {
-            return validateMagicToken(context, user, magicToken);
-        }
-
-        // For legacy magic links, check if magic links are enabled in config
-        AuthenticatorConfigModel config = context.getAuthenticatorConfig();
-        Map<String, String> configValues = config != null && config.getConfig() != null
-                ? config.getConfig()
-                : Map.of();
-
-        boolean magicEnabled = Boolean
-                .parseBoolean(configValues.getOrDefault(EmailConstants.MAGIC_LINK_ENABLED,
-                        String.valueOf(EmailConstants.DEFAULT_MAGIC_LINK_ENABLED)));
-        if (!magicEnabled) {
-            return false;
-        }
-
-        // Legacy: Check for old code-based magic link (deprecated, kept for backwards
-        // compatibility)
-        String submitted = queryParams.getFirst(EmailConstants.CODE);
-        if (!"1".equals(marker) || submitted == null || submitted.isBlank()) {
-            return false;
-        }
-
-        CodeContext codeContext = buildCodeContext(context.getAuthenticationSession(), submitted.strip());
-        if (codeContext.storedCode() == null || codeContext.expiresAt() == null) {
-            return false;
-        }
-
-        if (codeContext.expiresAt() < System.currentTimeMillis()) {
-            return false;
-        }
-
-        if (codeContext.submittedCode().equals(codeContext.storedCode())) {
-            resetEmailCode(context);
-            context.success();
-            return true;
-        }
-
-        // fall back to normal challenge (shows error after submit)
-        return false;
-    }
-
-    /**
-     * Validates the magic link token from the resource provider redirect.
-     * This is the new token-based approach that works across sessions.
-     */
-    private boolean validateMagicToken(AuthenticationFlowContext context, UserModel user, String magicToken) {
-        String storedToken = user.getFirstAttribute("magicLinkToken");
-        String expiryStr = user.getFirstAttribute("magicLinkTokenExpiry");
-
-        if (storedToken == null || expiryStr == null) {
-            logger.warnf("No magic link token found for user: %s", user.getId());
-            return false;
-        }
-
-        // Validate expiration
-        try {
-            long expiry = Long.parseLong(expiryStr);
-            if (System.currentTimeMillis() > expiry) {
-                logger.warnf("Magic link token expired for user %s", user.getId());
-                user.removeAttribute("magicLinkToken");
-                user.removeAttribute("magicLinkTokenExpiry");
-                return false;
-            }
-        } catch (NumberFormatException e) {
-            logger.errorf("Invalid magic link token expiry for user %s: %s", user.getId(), expiryStr);
-            user.removeAttribute("magicLinkToken");
-            user.removeAttribute("magicLinkTokenExpiry");
-            return false;
-        }
-
-        // Validate token
-        if (!storedToken.equals(magicToken)) {
-            logger.warnf("Invalid magic link token for user %s", user.getId());
-            return false;
-        }
-
-        // Token is valid - clear it and complete authentication
-        user.removeAttribute("magicLinkToken");
-        user.removeAttribute("magicLinkTokenExpiry");
-        user.removeAttribute("magicLinkRedirectUri");
-        user.removeAttribute("magicLinkClientId");
-        user.removeAttribute("magicLinkCodeChallenge");
-        user.removeAttribute("magicLinkCodeChallengeMethod");
-        user.removeAttribute("magicLinkState");
-        user.removeAttribute("magicLinkNonce");
-        user.removeAttribute("magicLinkResponseMode");
-        resetEmailCode(context);
-
-        logger.infof("Magic link token validated successfully for user %s", user.getId());
-        context.success();
-        return true;
     }
 
     /**
@@ -606,51 +487,49 @@ public class EmailAuthenticatorForm extends AbstractUsernameFormAuthenticator
     }
 
     private String buildMagicLink(AuthenticationFlowContext context, String code) {
-        // Build session-independent magic link using custom resource provider
         UserModel user = context.getUser();
         RealmModel realm = context.getRealm();
+        KeycloakSession session = context.getSession();
         AuthenticationSessionModel authSession = context.getAuthenticationSession();
 
-        // Store auth context information for later redirect
+        // Get OAuth2/OIDC parameters from auth session
         String clientId = authSession.getClient().getClientId();
         String redirectUri = authSession.getRedirectUri();
+        String scope = authSession.getClientNote(OIDCLoginProtocol.SCOPE_PARAM);
+        String state = authSession.getClientNote(OIDCLoginProtocol.STATE_PARAM);
+        String nonce = authSession.getClientNote(OIDCLoginProtocol.NONCE_PARAM);
+        String codeChallenge = authSession.getClientNote(OIDCLoginProtocol.CODE_CHALLENGE_PARAM);
+        String codeChallengeMethod = authSession.getClientNote(OIDCLoginProtocol.CODE_CHALLENGE_METHOD_PARAM);
+        String responseMode = authSession.getClientNote(OIDCLoginProtocol.RESPONSE_MODE_PARAM);
 
-        // Store all necessary OAuth2/OIDC parameters in user attributes
-        // so the resource provider can reconstruct the auth redirect
-        if (redirectUri != null && !redirectUri.isBlank()) {
-            user.setSingleAttribute("magicLinkRedirectUri", redirectUri);
-        }
-        user.setSingleAttribute("magicLinkClientId", clientId);
+        // Get TTL from config
+        AuthenticatorConfigModel config = context.getAuthenticatorConfig();
+        Map<String, String> configValues = config != null && config.getConfig() != null
+                ? config.getConfig()
+                : Map.of();
+        int ttl = resolvePositiveInt(configValues, EmailConstants.CODE_TTL, EmailConstants.DEFAULT_TTL);
 
-        // Store PKCE parameters (required for modern OAuth2 flows)
-        String codeChallenge = authSession.getClientNote("code_challenge");
-        String codeChallengeMethod = authSession.getClientNote("code_challenge_method");
-        if (codeChallenge != null && !codeChallenge.isBlank()) {
-            user.setSingleAttribute("magicLinkCodeChallenge", codeChallenge);
-        }
-        if (codeChallengeMethod != null && !codeChallengeMethod.isBlank()) {
-            user.setSingleAttribute("magicLinkCodeChallengeMethod", codeChallengeMethod);
-        }
+        // Create action token
+        int absoluteExpirationInSecs = Time.currentTime() + ttl;
+        EmailMagicLinkActionToken token = new EmailMagicLinkActionToken(
+                user.getId(),
+                absoluteExpirationInSecs,
+                clientId,
+                redirectUri,
+                scope,
+                nonce,
+                state,
+                codeChallenge,
+                codeChallengeMethod,
+                responseMode);
 
-        // Store other OAuth2/OIDC parameters
-        String state = authSession.getClientNote("state");
-        String nonce = authSession.getClientNote("nonce");
-        String responseMode = authSession.getClientNote("response_mode");
-        if (state != null && !state.isBlank()) {
-            user.setSingleAttribute("magicLinkState", state);
-        }
-        if (nonce != null && !nonce.isBlank()) {
-            user.setSingleAttribute("magicLinkNonce", nonce);
-        }
-        if (responseMode != null && !responseMode.isBlank()) {
-            user.setSingleAttribute("magicLinkResponseMode", responseMode);
-        }
-
-        UriBuilder builder = UriBuilder.fromUri(context.getSession().getContext().getUri().getBaseUri())
-                .path("realms/{realm}/email-magic-link/verify")
-                .queryParam("user", user.getId())
-                .queryParam("code", code)
-                .queryParam("client", clientId);
+        // Serialize token and build URL
+        String tokenString = token.serialize(session, realm, session.getContext().getUri());
+        UriBuilder builder = Urls.realmBase(session.getContext().getUri().getBaseUri())
+                .path(RealmsResource.class, "getLoginActionsService")
+                .path(LoginActionsService.class, "executeActionToken")
+                .queryParam(Constants.KEY, tokenString)
+                .queryParam(Constants.CLIENT_ID, clientId);
 
         return builder.build(realm.getName()).toString();
     }
