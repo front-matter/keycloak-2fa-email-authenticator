@@ -2,7 +2,6 @@ package com.mesutpiskin.keycloak.auth.email.token;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonTypeName;
 import org.keycloak.authentication.actiontoken.DefaultActionToken;
 
 /**
@@ -16,7 +15,6 @@ import org.keycloak.authentication.actiontoken.DefaultActionToken;
  * @version 26.1.0
  * @since 26.1.0
  */
-@JsonTypeName(EmailMagicLinkActionToken.TOKEN_TYPE)
 public class EmailMagicLinkActionToken extends DefaultActionToken {
 
   public static final String TOKEN_TYPE = "email-magic-link";
