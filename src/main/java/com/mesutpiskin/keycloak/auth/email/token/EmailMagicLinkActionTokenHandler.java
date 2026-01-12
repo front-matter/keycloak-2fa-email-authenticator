@@ -40,12 +40,15 @@ public class EmailMagicLinkActionTokenHandler
         Messages.INVALID_REQUEST,
         EventType.EXECUTE_ACTION_TOKEN,
         Errors.INVALID_REQUEST);
+    logger.infof("EmailMagicLinkActionTokenHandler constructor called - registered for token type: %s",
+        EmailMagicLinkActionToken.TOKEN_TYPE);
   }
 
   @Override
   public boolean canUseTokenRepeatedly(
       EmailMagicLinkActionToken token,
       ActionTokenContext<EmailMagicLinkActionToken> tokenContext) {
+    logger.infof("canUseTokenRepeatedly called for token: %s", token != null ? token.getId() : "null");
     // Magic links are one-time use only
     return false;
   }
@@ -55,6 +58,7 @@ public class EmailMagicLinkActionTokenHandler
       EmailMagicLinkActionToken token,
       ActionTokenContext<EmailMagicLinkActionToken> tokenContext,
       AuthenticationSessionModel currentAuthSession) {
+    logger.infof("getAuthenticationSessionIdFromToken called - returning null to create fresh session");
     // We don't store auth session ID in the token
     // ActionToken framework will create a fresh session
     return null;
@@ -64,6 +68,8 @@ public class EmailMagicLinkActionTokenHandler
   public AuthenticationSessionModel startFreshAuthenticationSession(
       EmailMagicLinkActionToken token,
       ActionTokenContext<EmailMagicLinkActionToken> tokenContext) {
+    logger.infof("startFreshAuthenticationSession called for user:%s, client:%s", token.getUserId(),
+        token.getIssuedFor());
     AuthenticationSessionModel authSession = tokenContext.createAuthenticationSessionForClient(token.getIssuedFor());
 
     // Set essential OIDC protocol parameters immediately
