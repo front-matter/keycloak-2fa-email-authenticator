@@ -130,9 +130,4 @@ public class EmailMagicLinkActionToken extends DefaultActionToken {
   public void setResponseMode(String responseMode) {
     this.responseMode = responseMode;
   }
-
-  @JsonIgnore
-  public String getActionTokenType() {
-    return TOKEN_TYPE;
-  }
 }
