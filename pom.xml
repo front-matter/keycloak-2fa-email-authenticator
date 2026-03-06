@@ -14,7 +14,7 @@
         <java.version>21</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
-        <keycloak.version>26.5.3</keycloak.version>
+        <keycloak.version>26.5.5</keycloak.version>
         <sendgrid.version>4.10.3</sendgrid.version>
         <aws-sdk.version>2.30.31</aws-sdk.version>
         <junit-jupiter.version>5.11.4</junit-jupiter.version>
